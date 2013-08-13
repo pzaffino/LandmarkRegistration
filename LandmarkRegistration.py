@@ -516,7 +516,7 @@ class LandmarkRegistrationWidget:
   def runOneIterationPlastimatchRegistration(self):
     import os,sys
     import vtk
-    loadablePath = os.path.join(slicer.modules.plastimatch_slicer_bspline.path,'../../qt-loadable-modules')
+    loadablePath = os.path.join(slicer.modules.plastimatch_slicer_bspline.path,'..'+os.sep'..'+os.sep+'qt-loadable-modules')
     if loadablePath not in sys.path:
       sys.path.append(loadablePath)
     import vtkSlicerPlastimatchModuleLogicPython
