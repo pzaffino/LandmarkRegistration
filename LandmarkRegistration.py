@@ -510,6 +510,10 @@ class LandmarkRegistrationWidget:
     pass
   
   def onHybridApply(self):
+    for i in range(int(self.logic.hybridMaxIteration)):
+      runOneIterationPlastimatchRegistration()
+  
+  def runOneIterationPlastimatchRegistration(self):
     import os,sys
     import vtk
     loadablePath = os.path.join(slicer.modules.plastimatch_slicer_bspline.path,'../../qt-loadable-modules')
@@ -542,10 +546,6 @@ class LandmarkRegistrationWidget:
     reg.SetFixedLandmarks(points[fixed])
     reg.SetMovingLandmarks(points[moving])
 
-# Set landmarks from files (not required)re
-#reg.SetFixedLandmarksFn("fixed_landmarks.fcsv")
-#reg.SetMovingLandmarksFn("moving_landmarks.fcsv")
-
     print( "at click time, cost is %s" % str(self.logic.hybridCost))
     print( "at click time, hardware is %s" % str(self.logic.hybridHardware))
     print( "at click time, output type is %s" % str(self.logic.hybridOutType))
@@ -561,16 +561,17 @@ class LandmarkRegistrationWidget:
     reg.SetPar("optim", "lbfgsb")
     reg.SetPar("impl", "plastimatch")
     reg.SetPar("metric", str(self.logic.hybridCost))
-    reg.SetPar("max_its", str(self.logic.hybridMaxIteration))
+    reg.SetPar("max_its", "1")
     reg.SetPar("convergence_tol", "5")
     reg.SetPar("grad_tol", "1.5")
     reg.SetPar("res", str(self.logic.hybridSubsampling))
     reg.SetPar("grid_spac", str(self.logic.hybridGridSize))
-# Run registration
+    
+    # Run registration
     print "starting RunReg"
     reg.RunRegistration()
     print "control went past RunReg"
-# Done
+    # Done
 
   def onHybridCost(self):
     for cost in self.hybridCosts:
