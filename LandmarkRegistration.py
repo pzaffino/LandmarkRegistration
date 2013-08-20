@@ -58,7 +58,7 @@ class LandmarkRegistrationWidget:
       self.parent.setMRMLScene(slicer.mrmlScene)
     else:
       self.parent = parent
-    self.layout = self.parent.layout()
+      self.layout = self.parent.layout()
     if not parent:
       self.setup()
       self.parent.show()
@@ -106,6 +106,9 @@ class LandmarkRegistrationWidget:
     parametersCollapsibleButton.text = "Parameters"
     self.layout.addWidget(parametersCollapsibleButton)
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
+
+    # NSh
+    self.sceneHasWarpedVolume = False
 
     self.volumeSelectors = {}
     self.viewNames = ("Fixed", "Moving", "Transformed")
@@ -287,9 +290,9 @@ class LandmarkRegistrationWidget:
     #self.hybridRegularization = {}
     self.hybridRegularization = ctk.ctkSliderWidget()
     self.hybridRegularization.minimum = 0.0
-    self.hybridRegularization.maximum = 10.0
+    self.hybridRegularization.maximum = 1.0
     self.hybridRegularization.value = 0.0
-    self.hybridRegularization.singleStep = 0.01
+    self.hybridRegularization.singleStep = 0.0001
     self.hybridRegularization.setToolTip( "Second derivative smoothing penalty" )
     buttonLayout.addWidget(self.hybridRegularization)
     self.hybridRegularization.connect('valueChanged(double)', self.onHybridRegularization)
@@ -308,11 +311,11 @@ class LandmarkRegistrationWidget:
     hybridFormLayout.addRow("Landmark Penalty:", buttonLayout)
 
     buttonLayout = qt.QHBoxLayout()
-    self.hybridMaxIteration = ctk.ctkSpinBox()
+    self.hybridMaxIteration = ctk.ctkDoubleSpinBox()
     self.hybridMaxIteration.minimum = 1
-    self.hybridMaxIteration.maximum = 500.0
+    self.hybridMaxIteration.maximum = 500
     self.hybridMaxIteration.value = 50
-    self.hybridMaxIteration.singleStep = 5
+    self.hybridMaxIteration.singleStep = 1
     self.hybridMaxIteration.setToolTip( "Maximum number of iterations" )
     #self.hybridMaxIteration.setValue(self.logic.hybridMaxIteration)
     buttonLayout.addWidget(self.hybridMaxIteration)
@@ -332,6 +335,14 @@ class LandmarkRegistrationWidget:
     buttonLayout.addWidget(self.hybridApply)
     self.hybridApply.connect('clicked(bool)', self.onHybridApply)
     hybridFormLayout.addRow("", buttonLayout)
+   
+    buttonLayout = qt.QHBoxLayout()
+    self.hybridStop = qt.QPushButton("Stop B-spline")
+    self.hybridStop.setToolTip( "Stop B-spline" )
+    buttonLayout.addWidget(self.hybridStop)
+    self.hybridStop.connect('clicked(bool)', self.onHybridStop)
+    hybridFormLayout.addRow("", buttonLayout)
+
 
     #self.hybridTransformSelector = slicer.qMRMLNodeComboBox()
     #self.hybridTransformSelector.nodeTypes = ( ("vtkMRMLBSplineTransformNode"), "" )
@@ -359,7 +370,7 @@ class LandmarkRegistrationWidget:
     #
     self.applyButton = qt.QPushButton("Run Registration")
     self.applyButton.toolTip = "Run the registration algorithm."
-    self.applyButton.enabled = False
+    self.applyButton.enabled = True
     parametersFormLayout.addRow(self.applyButton)
 
     # connections
@@ -414,7 +425,15 @@ class LandmarkRegistrationWidget:
     transformed = self.volumeSelectors['Transformed'].currentNode()
     for registrationType in self.registrationTypes:
       self.registrationTypeInterfaces[registrationType].enabled = bool(fixed and moving)
-    self.logic.hiddenFiducialVolumes = (transformed,)
+      if self.registrationTypeInterfaces[registrationType].enabled:
+        print "NSh: both fixed and moving are selected"
+        if self.sceneHasWarpedVolume == False:
+            self.sceneHasWarpedVolume = True
+            print "NSh: attempting to create new warped volume New-Warped-Volume"
+            volumesLogic = slicer.modules.volumes.logic()
+            transformed = volumesLogic.CloneVolume(slicer.mrmlScene, fixed, "New-Warped-Volume")
+    # NSh: the line below controls if landmarks are shown on transformed volume
+    #self.logic.hiddenFiducialVolumes = (transformed,)
 
   def onLayout(self, layoutMode="Axi/Sag/Cor",volumesToShow=None):
     """When the layout is changed by the VisualizationWidget
@@ -434,7 +453,8 @@ class LandmarkRegistrationWidget:
       self.sliceNodesByViewName = compareLogic.viewerPerVolume(volumeNodes,viewNames=activeViewNames,orientation=layoutMode)
     elif layoutMode == 'Axi/Sag/Cor':
       self.sliceNodesByViewName = compareLogic.viewersPerVolume(volumeNodes)
-    self.overlayFixedOnTransformed()
+    # NSh test - remove visual confusion
+    #self.overlayFixedOnTransformed()
     self.updateSliceNodesByVolumeID()
     self.onLandmarkPicked(self.landmarksWidget.selectedLandmark)
 
@@ -510,27 +530,32 @@ class LandmarkRegistrationWidget:
     pass
   
   def onHybridApply(self):
-    for i in range(int(self.logic.hybridMaxIteration)):
-      runOneIterationPlastimatchRegistration()
-  
-  def runOneIterationPlastimatchRegistration(self):
-    import os,sys
-    import vtk
+    print('Run B-spline - Apply button pressed')
+    self.bsplineRegistration = True
+    self.runOneIterationPlastimatchRegistration('Fixed', 'Moving')
+    if int(self.logic.hybridMaxIteration) > 1:
+      for i in range(int(self.logic.hybridMaxIteration)-1):
+        if self.bsplineRegistration:
+          self.runOneIterationPlastimatchRegistration('Fixed', 'Transformed')
+ 
+  def runOneIterationPlastimatchRegistration(self, fixedVolumeName, movingVolumeName):
+    import os, sys, vtk
+    import vtkSlicerPlastimatchModuleLogicPython
+
     loadablePath = os.path.join(slicer.modules.plastimatch_slicer_bspline.path,'..'+os.sep+'..'+os.sep+'qt-loadable-modules')
     if loadablePath not in sys.path:
       sys.path.append(loadablePath)
-    import vtkSlicerPlastimatchModuleLogicPython
-    print('Run B-spline - Apply button pressed')
+    
     reg = vtkSlicerPlastimatchModuleLogicPython.vtkSlicerPlastimatchLogic()
     reg.SetMRMLScene(slicer.mrmlScene)
 
-    # Set input/output images (required) and input transformation (not required)
-    reg.SetFixedID(self.volumeSelectors['Fixed'].currentNode().GetID())
-    reg.SetMovingID(self.volumeSelectors['Moving'].currentNode().GetID())
+    # Set input/output images
+    reg.SetFixedID(self.volumeSelectors[fixedVolumeName].currentNode().GetID())
+    reg.SetMovingID(self.volumeSelectors[movingVolumeName].currentNode().GetID())
     reg.SetOutputVolumeID(self.volumeSelectors['Transformed'].currentNode().GetID())
 
-    fixed = self.volumeSelectors['Fixed'].currentNode()
-    moving = self.volumeSelectors['Moving'].currentNode()
+    fixed = self.volumeSelectors[fixedVolumeName].currentNode()
+    moving = self.volumeSelectors[movingVolumeName].currentNode()
     landmarks = self.logic.landmarksForVolumes((fixed,moving))
     points = {}
     point = [0,]*3
@@ -541,10 +566,12 @@ class LandmarkRegistrationWidget:
         fid.GetFiducialCoordinates(point)
         points[volumeNode].InsertNextPoint(point)
         print("%s: ('%s', %s)" % (volumeNode.GetName(), fiducialName, str(point)))
-
+  
     # Set landmarks from Slicer (not required)
+    print "trying to SetFixed/MovingLandmarks"
     reg.SetFixedLandmarks(points[fixed])
     reg.SetMovingLandmarks(points[moving])
+    print "Done SetFixed/MovingLandmarks"
 
     print( "at click time, cost is %s" % str(self.logic.hybridCost))
     print( "at click time, hardware is %s" % str(self.logic.hybridHardware))
@@ -566,6 +593,8 @@ class LandmarkRegistrationWidget:
     reg.SetPar("grad_tol", "1.5")
     reg.SetPar("res", str(self.logic.hybridSubsampling))
     reg.SetPar("grid_spac", str(self.logic.hybridGridSize))
+    reg.SetPar("regularization_lambda", str(self.logic.hybridRegularization))
+    reg.SetPar("landmark_stiffness", str(self.logic.hybridLandmarkPenalty))
     
     # Run registration
     print "starting RunReg"
@@ -573,6 +602,36 @@ class LandmarkRegistrationWidget:
     print "control went past RunReg"
     # Done
 
+    # Warp landmarks
+    print "starting WarpLandmarks"
+    reg.WarpLandmarks()
+    print "control went past WarpLandmarks"
+    # Done
+
+    transformed = self.volumeSelectors['Transformed'].currentNode()
+    volumeNodes = self.currentVolumeNodes()
+    for i in range(reg.GetWarpedLandmarks().GetNumberOfPoints()):
+      # find landmark L-str(i) on transformed, then set its position to reg.GetWarpedLandmarks().GetPoint(i)
+      fiducialsByName = self.logic.landmarksForVolumes(volumeNodes)
+      if fiducialsByName.has_key("L-"+str(i)):
+        landmarksFiducials = fiducialsByName["L-"+str(i)]
+        for fid in landmarksFiducials:
+          volumeNodeID = fid.GetAttribute("AssociatedNodeID")
+          if volumeNodeID == transformed.GetID(): 
+              print "found landmark %s on transformed" % str(i)
+              fid.SetFiducial(reg.GetWarpedLandmarks().GetPoint(i), True, True)
+      # old logic of adding extra landmarks
+      #self.logic.addFiducial("W-"+str(i), reg.GetWarpedLandmarks().GetPoint(i), associatedNode=transformed)
+
+    slicer.app.processEvents()
+    transformed.GetImageData().GetPointData().GetScalars().Modified()
+    transformed.GetImageData().Modified()
+    transformed.Modified()
+    slicer.app.processEvents()
+
+  def onHybridStop(self):
+    self.bsplineRegistration = False
+  
   def onHybridCost(self):
     for cost in self.hybridCosts:
       if self.hybridCostButtons[cost].checked:
@@ -1503,4 +1562,3 @@ class LandmarkRegistrationTest(unittest.TestCase):
     w.onThinPlateApply()
 
     self.delayDisplay('test_LandmarkRegistration3 passed!')
-
