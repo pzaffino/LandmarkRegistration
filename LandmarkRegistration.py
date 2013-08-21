@@ -322,17 +322,6 @@ class LandmarkRegistrationWidget:
     self.hybridMaxIteration.connect('valueChanged(double)', self.onHybridMaxIteration)
     hybridFormLayout.addRow("Max iterations:", buttonLayout)
 
-    if False:
-      """
-      TODO: REMOVE ?
-      """
-      buttonLayout = qt.QHBoxLayout()
-      self.hybridWarpedLandm = ctk.ctkPathLineEdit()
-      self.hybridWarpedLandm.setCurrentPath('c:/nadya/work/synthetic/warped.fcsv')
-      self.hybridWarpedLandm.setToolTip( "Full path to file" )
-      buttonLayout.addWidget(self.hybridWarpedLandm)
-      hybridFormLayout.addRow("Warped Landmarks (file):", buttonLayout)
-
     buttonLayout = qt.QHBoxLayout()
     self.hybridApply = qt.QPushButton("Run B-spline")
     self.hybridApply.setToolTip( "Run B-spline" )
@@ -536,6 +525,8 @@ class LandmarkRegistrationWidget:
   def onHybridApply(self):
     print('Run B-spline - Apply button pressed')
     self.bsplineRegistration = True
+    #for volume in ['Fixed', 'Moving', 'Transformed']:
+      #self.volumeSelectors[volume].currentNode().GetImageData().SetScalarTypeToDouble()
     self.runOneIterationPlastimatchRegistration('Fixed', 'Moving')
     if int(self.logic.hybridMaxIteration) > 1:
       for i in range(int(self.logic.hybridMaxIteration)-1):
