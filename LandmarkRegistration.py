@@ -271,7 +271,7 @@ class LandmarkRegistrationWidget:
 
     buttonLayout = qt.QHBoxLayout()
     self.hybridSubsampling = qt.QLineEdit()
-    self.hybridSubsampling.setText('4 4 2')
+    self.hybridSubsampling.setText('2 2 2')
     self.hybridSubsampling.setToolTip( "Subsampling rate" ) 
     buttonLayout.addWidget(self.hybridSubsampling)
     self.hybridSubsampling.connect('textEdited(QString)', self.onHybridSubsampling)
@@ -322,12 +322,16 @@ class LandmarkRegistrationWidget:
     self.hybridMaxIteration.connect('valueChanged(double)', self.onHybridMaxIteration)
     hybridFormLayout.addRow("Max iterations:", buttonLayout)
 
-    buttonLayout = qt.QHBoxLayout()
-    self.hybridWarpedLandm = ctk.ctkPathLineEdit()
-    self.hybridWarpedLandm.setCurrentPath('c:/nadya/work/synthetic/warped.fcsv')
-    self.hybridWarpedLandm.setToolTip( "Full path to file" )
-    buttonLayout.addWidget(self.hybridWarpedLandm)
-    hybridFormLayout.addRow("Warped Landmarks (file):", buttonLayout)
+    if False:
+      """
+      TODO: REMOVE ?
+      """
+      buttonLayout = qt.QHBoxLayout()
+      self.hybridWarpedLandm = ctk.ctkPathLineEdit()
+      self.hybridWarpedLandm.setCurrentPath('c:/nadya/work/synthetic/warped.fcsv')
+      self.hybridWarpedLandm.setToolTip( "Full path to file" )
+      buttonLayout.addWidget(self.hybridWarpedLandm)
+      hybridFormLayout.addRow("Warped Landmarks (file):", buttonLayout)
 
     buttonLayout = qt.QHBoxLayout()
     self.hybridApply = qt.QPushButton("Run B-spline")
@@ -538,7 +542,7 @@ class LandmarkRegistrationWidget:
         if self.bsplineRegistration:
           self.runOneIterationPlastimatchRegistration('Fixed', 'Transformed')
  
-  def runOneIterationPlastimatchRegistration(self, fixedVolumeName, movingVolumeName):
+  def runOneIterationPlastimatchRegistration(self, fixedDataName, movingDataName):
     import os, sys, vtk
     import vtkSlicerPlastimatchModuleLogicPython
 
@@ -550,12 +554,12 @@ class LandmarkRegistrationWidget:
     reg.SetMRMLScene(slicer.mrmlScene)
 
     # Set input/output images
-    reg.SetFixedID(self.volumeSelectors[fixedVolumeName].currentNode().GetID())
-    reg.SetMovingID(self.volumeSelectors[movingVolumeName].currentNode().GetID())
+    reg.SetFixedID(self.volumeSelectors[fixedDataName].currentNode().GetID())
+    reg.SetMovingID(self.volumeSelectors[movingDataName].currentNode().GetID())
     reg.SetOutputVolumeID(self.volumeSelectors['Transformed'].currentNode().GetID())
 
-    fixed = self.volumeSelectors[fixedVolumeName].currentNode()
-    moving = self.volumeSelectors[movingVolumeName].currentNode()
+    fixed = self.volumeSelectors[fixedDataName].currentNode()
+    moving = self.volumeSelectors[movingDataName].currentNode()
     landmarks = self.logic.landmarksForVolumes((fixed,moving))
     points = {}
     point = [0,]*3
@@ -588,7 +592,7 @@ class LandmarkRegistrationWidget:
     reg.SetPar("optim", "lbfgsb")
     reg.SetPar("impl", "plastimatch")
     reg.SetPar("metric", str(self.logic.hybridCost))
-    reg.SetPar("max_its", "1")
+    reg.SetPar("max_its", "5")
     reg.SetPar("convergence_tol", "5")
     reg.SetPar("grad_tol", "1.5")
     reg.SetPar("res", str(self.logic.hybridSubsampling))
@@ -623,11 +627,9 @@ class LandmarkRegistrationWidget:
       # old logic of adding extra landmarks
       #self.logic.addFiducial("W-"+str(i), reg.GetWarpedLandmarks().GetPoint(i), associatedNode=transformed)
 
+    # Update view
     slicer.app.processEvents()
-    transformed.GetImageData().GetPointData().GetScalars().Modified()
-    transformed.GetImageData().Modified()
     transformed.Modified()
-    slicer.app.processEvents()
 
   def onHybridStop(self):
     self.bsplineRegistration = False
